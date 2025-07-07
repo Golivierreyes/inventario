@@ -1,12 +1,11 @@
 // src/components/settings/UserManagement.js
 import React, { useState, useEffect, useContext } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { AppContext } from '../../context/AppContext';
 import { Trash2, UserPlus } from 'lucide-react';
 
-const UserManagement = ({ storeId, storeName }) => {
-    const { db, app, showNotification, currentThemeColors, showConfirmationModal } = useContext(AppContext);
+const UserManagement = ({ storeId }) => {
+    const { db, showNotification, currentThemeColors, showConfirmationModal } = useContext(AppContext);
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [newUsername, setNewUsername] = useState('');
@@ -49,22 +48,32 @@ const UserManagement = ({ storeId, storeName }) => {
             `Se creará una cuenta para '${newUsername}' con el email de acceso '${email}'. ¿Continuar?`,
             async () => {
                 try {
-                    const functions = getFunctions(app);
-                    const createUser = httpsCallable(functions, 'createUserAccount');
-                    await createUser({
-                        email,
-                        password: newPassword,
-                        username: newUsername.trim(),
-                        role: newUserRole,
-                        storeId: storeId,
+                    // --- CORRECCIÓN: Llamada a la función de Vercel en lugar de Firebase ---
+                    const response = await fetch('/api/createUser', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            email,
+                            password: newPassword,
+                            username: newUsername.trim(),
+                            role: newUserRole,
+                            storeId: storeId,
+                        }),
                     });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        // Si la respuesta del servidor no es exitosa, lanza un error
+                        throw new Error(result.error || 'Ocurrió un error en el servidor.');
+                    }
                     
                     showNotification(`Usuario '${newUsername}' creado exitosamente.`, 'success');
                     setNewUsername('');
                     setNewPassword('');
                 } catch (error) {
                     console.error("Error al crear usuario:", error);
-                    showNotification(error.message || 'Error al crear el usuario.', 'error');
+                    showNotification(error.message, 'error');
                 }
             }
         );
@@ -76,13 +85,24 @@ const UserManagement = ({ storeId, storeName }) => {
             `¿Estás seguro de eliminar a '${username}'? Esta acción es permanente.`,
             async () => {
                 try {
-                    const functions = getFunctions(app);
-                    const deleteUser = httpsCallable(functions, 'deleteUserAccount');
-                    await deleteUser({ uid: userId });
+                    // --- CORRECCIÓN: Llamada a la función de Vercel para eliminar ---
+                    // (Necesitarás crear un archivo /api/deleteUser.js similar al de createUser)
+                    const response = await fetch('/api/deleteUser', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ uid: userId }),
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Ocurrió un error en el servidor.');
+                    }
+                    
                     showNotification(`Usuario '${username}' eliminado.`, 'success');
                 } catch (error) {
                     console.error("Error al eliminar usuario:", error);
-                    showNotification(error.message || 'Error al eliminar el usuario.', 'error');
+                    showNotification(error.message, 'error');
                 }
             }
         );
