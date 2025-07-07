@@ -26,67 +26,47 @@ const Login = () => {
         try {
             let userEmail;
 
-            // --- LÓGICA DE LOGIN HÍBRIDA ---
+            // --- LÓGICA DE LOGIN SIMPLIFICADA ---
+
             if (username.toLowerCase() === 'golivier' && storeName.trim() === '') {
-                // Caso especial para el superusuario
-                userEmail = 'golivier@super.user'; 
+                // Caso especial para el superusuario, se mantiene igual.
+                userEmail = 'golivier@super.user';
             } else {
-                // Para usuarios normales, buscar su email en la base de datos.
-                if (!storeName.trim()) {
-                    setError('Por favor, introduce el nombre de la Tienda.');
-                    return;
-                }
+                // Para usuarios normales, primero encontramos el storeId.
                 const tenantsRef = collection(db, `artifacts/${appId}/tenants`);
-                const storeQuery = query(tenantsRef, where("normalizedName", "==", storeName.trim().toLowerCase()));
-                const storeSnapshot = await getDocs(storeQuery);
+                const q = query(tenantsRef, where("name", "==", storeName.trim()));
+                const querySnapshot = await getDocs(q);
 
-                if (storeSnapshot.empty) {
-                    setError('Tienda no encontrada.');
-                    return;
+                if (querySnapshot.empty) {
+                    throw new Error("No se encontró una tienda con ese nombre.");
                 }
                 
-                const storeId = storeSnapshot.docs[0].id;
-                
-                // Buscar al usuario por su 'username' y 'storeId' en la colección raíz 'users'
-                const usersRef = collection(db, `users`);
-                const userQuery = query(usersRef, where("username", "==", username.trim()), where("storeId", "==", storeId));
-                const userSnapshot = await getDocs(userQuery);
+                // Obtenemos el ID de la tienda del primer resultado.
+                const storeId = querySnapshot.docs[0].id;
 
-                if (userSnapshot.empty) {
-                    setError('Usuario o contraseña incorrectos.');
-                    return;
-                }
-
-                const userData = userSnapshot.docs[0].data();
-                userEmail = userData.email;
-
-                if (!userEmail) {
-                    setError('Cuenta de usuario mal configurada.');
-                    return;
-                }
+                // CORRECCIÓN CLAVE: Construimos el email directamente, sin buscar al usuario.
+                // Esto debe coincidir con la lógica de creación en tu función de Vercel.
+                userEmail = `${username.trim().toLowerCase().replace(/\s+/g, '')}.${storeId.substring(0, 5)}@inventory.app`;
             }
-
-            // Iniciar sesión en Firebase Auth con el email encontrado y la contraseña
+            
+            // Ahora, intentamos iniciar sesión con el email construido.
             await signInWithEmailAndPassword(auth, userEmail, password);
             showNotification('Inicio de sesión exitoso.', 'success');
 
-        } catch (err) {
-            console.error("Error en inicio de sesión:", err.code);
-            if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-                setError('Credenciales incorrectas.');
-            } else {
-                setError('Error al intentar iniciar sesión.');
-            }
+        } catch (error) {
+            console.error("Error de inicio de sesión:", error);
+            setError("Credenciales incorrectas o error de conexión.");
+            showNotification(error.message === "auth/invalid-credential" ? "Credenciales incorrectas." : "Error al iniciar sesión.", "error");
         }
     };
 
     return (
-        <div className={`${currentThemeColors.cardBg} backdrop-filter backdrop-blur-lg p-8 rounded-2xl shadow-2xl w-full max-w-md text-center`}>
-            <h2 className={`${currentThemeColors.textColor} text-4xl font-extrabold mb-6`}>Bienvenido</h2>
-            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+        <div className="w-full max-w-md p-8 space-y-6 bg-white bg-opacity-20 backdrop-filter backdrop-blur-lg rounded-2xl shadow-2xl animate-fade-in-up">
+            <h2 className={`text-4xl font-extrabold text-center ${currentThemeColors.textColor}`}>Bienvenido</h2>
+            <form onSubmit={handleLogin} className="space-y-6">
                 <div className="relative">
                     <Building className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
-                    <input type="text" placeholder="Nombre de la Tienda (omitir para Super Usuario)" value={storeName} onChange={(e) => setStoreName(e.target.value)} className={`w-full p-3 pl-10 rounded-xl ${currentThemeColors.inputBg} border ${currentThemeColors.inputBorder} ${currentThemeColors.modalText} placeholder-gray-500`} />
+                    <input type="text" placeholder="Nombre de la Tienda (comillas incluidas)" value={storeName} onChange={(e) => setStoreName(e.target.value)} className={`w-full p-3 pl-10 rounded-xl ${currentThemeColors.inputBg} border ${currentThemeColors.inputBorder} ${currentThemeColors.modalText} placeholder-gray-500`} />
                 </div>
                 <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
@@ -102,7 +82,7 @@ const Login = () => {
                 <button type="submit" className={`flex items-center justify-center w-full px-6 py-3 ${currentThemeColors.buttonBg} ${currentThemeColors.textColor} text-lg font-semibold rounded-xl shadow-lg`}>
                     <Key size={24} className="mr-3" /> Ingresar
                 </button>
-                {error && <p className="text-red-300 mt-4 text-sm">{error}</p>}
+                {error && <p className="text-red-400 text-center">{error}</p>}
             </form>
         </div>
     );
